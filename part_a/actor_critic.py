@@ -233,7 +233,7 @@ def plot_results(episode_rewards, actor_losses, critic_losses, experiment_name):
 # Main execution block
 if __name__ == "__main__":
     # Set environment
-    env_name = "LunarLander-v2"
+    env_name = "LunarLander-v3"
     
     # Run experiment 1: Default hyperparameters
     print("--- Running Experiment 1 ---")

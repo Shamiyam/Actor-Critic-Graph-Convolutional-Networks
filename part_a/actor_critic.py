@@ -1,5 +1,5 @@
 # Step 1: Install necessary libraries in the Colab environment
-!pip install gymnasium[box2d] torch matplotlib
+# #pip install gymnasium[box2d] torch matplotlib
 
 # Step 2: Import libraries
 import numpy as np

@@ -1,5 +1,9 @@
+# Step 1: Install necessary libraries in the Colab environment
+!pip install gymnasium[box2d] torch matplotlib
+
+# Step 2: Import libraries
 import numpy as np
-import gym
+import gymnasium as gym
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -74,10 +78,11 @@ class ActorCritic:
         state = torch.FloatTensor(state)
         next_state = torch.FloatTensor(next_state)
         reward = torch.FloatTensor([reward])
-        done = torch.FloatTensor([1.0 if done else 0.0])
+        done_tensor = torch.FloatTensor([1.0 if done else 0.0])
         
         # Calculate advantage and value targets
-        next_value = self.critic(next_state) * (1 - done)
+        # The value of the next state is 0 if the episode is done
+        next_value = self.critic(next_state) * (1 - done_tensor)
         target_value = reward + self.gamma * next_value
         value = self.critic(state)
         
@@ -119,7 +124,8 @@ def train(env_name, num_episodes=1000, hidden_dim=128, lr_actor=0.0003, lr_criti
     
     # Training loop
     for episode in range(num_episodes):
-        state = env.reset()
+        # GYMNASIUM UPDATE: env.reset() now returns (state, info)
+        state, info = env.reset(seed=seed + episode) # Use different seed per episode for variety
         done = False
         episode_reward = 0
         episode_actor_loss = 0
@@ -128,7 +134,12 @@ def train(env_name, num_episodes=1000, hidden_dim=128, lr_actor=0.0003, lr_criti
         
         while not done:
             action, log_prob = agent.select_action(state)
-            next_state, reward, done, _ = env.step(action)
+            
+            # GYMNASIUM UPDATE: env.step() returns 5 values
+            next_state, reward, terminated, truncated, info = env.step(action)
+            
+            # GYMNASIUM UPDATE: 'done' is the combination of 'terminated' and 'truncated'
+            done = terminated or truncated
             
             actor_loss, critic_loss = agent.update(state, action, reward, next_state, done, log_prob)
             episode_actor_loss += actor_loss
@@ -148,24 +159,35 @@ def train(env_name, num_episodes=1000, hidden_dim=128, lr_actor=0.0003, lr_criti
             avg_reward = np.mean(all_episode_rewards[-10:])
             print(f"Episode {episode+1}, Average Reward (last 10): {avg_reward:.2f}")
     
+    env.close()
     return all_episode_rewards, actor_losses, critic_losses, agent
 
-def evaluate(env_name, agent, num_episodes=10, render=False):
-    """Evaluate the trained agent."""
-    env = gym.make(env_name)
+def evaluate(env_name, agent, num_episodes=10, video_folder='videos/'):
+    """Evaluate the trained agent and record a video."""
+    # Create the video folder if it doesn't exist
+    os.makedirs(video_folder, exist_ok=True)
+
+    # GYMNASIUM UPDATE: Set render_mode to 'rgb_array' for video recording
+    env = gym.make(env_name, render_mode="rgb_array")
+    
+    # GYMNASIUM UPDATE: Wrap the environment to record a video
+    env = gym.wrappers.RecordVideo(env, video_folder, episode_trigger=lambda e: True) # Record all episodes
     
     all_rewards = []
     for episode in range(num_episodes):
-        state = env.reset()
+        # GYMNASIUM UPDATE: env.reset() now returns (state, info)
+        state, info = env.reset()
         done = False
         episode_reward = 0
         
         while not done:
-            if render:
-                env.render()
-            
             action, _ = agent.select_action(state)
-            next_state, reward, done, _ = env.step(action)
+            
+            # GYMNASIUM UPDATE: env.step() returns 5 values
+            next_state, reward, terminated, truncated, info = env.step(action)
+            
+            # GYMNASIUM UPDATE: 'done' is the combination of 'terminated' and 'truncated'
+            done = terminated or truncated
             
             state = next_state
             episode_reward += reward
@@ -173,42 +195,48 @@ def evaluate(env_name, agent, num_episodes=10, render=False):
         all_rewards.append(episode_reward)
         print(f"Test Episode {episode+1}: Reward = {episode_reward:.2f}")
     
+    env.close()
     avg_reward = np.mean(all_rewards)
-    print(f"Average Test Reward: {avg_reward:.2f}")
+    print(f"\nAverage Test Reward: {avg_reward:.2f}")
+    print(f"Evaluation videos saved in '{video_folder}' folder.")
     
     return all_rewards
 
 def plot_results(episode_rewards, actor_losses, critic_losses, experiment_name):
     """Plot and save training results."""
     # Create plots directory if it doesn't exist
-    os.makedirs("plots", exist_ok=True)
+    plots_dir = "plots"
+    os.makedirs(plots_dir, exist_ok=True)
     
     # Plot episode rewards
-    plt.figure(figsize=(10, 5))
+    plt.figure(figsize=(12, 5))
     plt.plot(episode_rewards)
     plt.title(f'Episode Rewards - {experiment_name}')
     plt.xlabel('Episode')
     plt.ylabel('Total Reward')
-    plt.savefig(f"plots/rewards_{experiment_name}.png")
-    plt.close()
+    plt.grid(True)
+    plt.savefig(os.path.join(plots_dir, f"rewards_{experiment_name}.png"))
+    plt.show()
     
     # Plot losses
-    plt.figure(figsize=(10, 5))
+    plt.figure(figsize=(12, 5))
     plt.plot(actor_losses, label='Actor Loss')
     plt.plot(critic_losses, label='Critic Loss')
     plt.title(f'Training Losses - {experiment_name}')
     plt.xlabel('Episode')
     plt.ylabel('Loss')
     plt.legend()
-    plt.savefig(f"plots/losses_{experiment_name}.png")
-    plt.close()
+    plt.grid(True)
+    plt.savefig(os.path.join(plots_dir, f"losses_{experiment_name}.png"))
+    plt.show()
 
+# Main execution block
 if __name__ == "__main__":
     # Set environment
     env_name = "LunarLander-v2"
     
     # Run experiment 1: Default hyperparameters
-    print("Running Experiment 1...")
+    print("--- Running Experiment 1 ---")
     rewards1, actor_losses1, critic_losses1, agent1 = train(
         env_name, 
         num_episodes=300,
@@ -220,7 +248,7 @@ if __name__ == "__main__":
     plot_results(rewards1, actor_losses1, critic_losses1, "experiment1")
     
     # Run experiment 2: Different hyperparameters
-    print("\nRunning Experiment 2...")
+    print("\n--- Running Experiment 2 ---")
     rewards2, actor_losses2, critic_losses2, agent2 = train(
         env_name, 
         num_episodes=300,
@@ -232,17 +260,22 @@ if __name__ == "__main__":
     plot_results(rewards2, actor_losses2, critic_losses2, "experiment2")
     
     # Compare results
-    plt.figure(figsize=(10, 5))
-    plt.plot(rewards1, label='Experiment 1')
-    plt.plot(rewards2, label='Experiment 2')
+    plt.figure(figsize=(12, 5))
+    plt.plot(rewards1, label='Experiment 1 (HD:128, LR_A:0.0003)')
+    plt.plot(rewards2, label='Experiment 2 (HD:256, LR_A:0.0001)')
     plt.title('Episode Rewards Comparison')
     plt.xlabel('Episode')
     plt.ylabel('Total Reward')
     plt.legend()
+    plt.grid(True)
     plt.savefig("plots/rewards_comparison.png")
-    plt.close()
+    plt.show()
     
     # Evaluate the better agent
-    print("\nEvaluating the trained agent...")
+    print("\n--- Evaluating the Better Agent ---")
+    # Compare based on the average reward of the last 50 episodes
     better_agent = agent1 if np.mean(rewards1[-50:]) > np.mean(rewards2[-50:]) else agent2
-    test_rewards = evaluate(env_name, better_agent, num_episodes=10)
+    better_exp_name = "Experiment 1" if better_agent == agent1 else "Experiment 2"
+    print(f"The agent from {better_exp_name} performed better. Evaluating it now...")
+    
+    test_rewards = evaluate(env_name, better_agent, num_episodes=5, video_folder=f'videos_{better_exp_name.replace(" ", "_")}')

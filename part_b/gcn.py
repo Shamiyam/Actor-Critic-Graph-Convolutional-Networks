@@ -32,29 +32,14 @@ def load_data(dataset_name):
         content_path = 'data/cora/cora.content'
         cites_path = 'data/cora/cora.cites'
     elif dataset_name == 'pubmed':
-        content_path = 'data/pubmed/Pubmed-Diabetes.NODE.paper.tab'
-        cites_path = 'data/pubmed/Pubmed-Diabetes.DIRECTED.cites.tab'
+        # UPDATED PATH to match the new directory structure
+        content_path = 'data/Pubmed-Diabetes/Pubmed-Diabetes.NODE.paper.tab'
+        cites_path = 'data/Pubmed-Diabetes/Pubmed-Diabetes.DIRECTED.cites.tab'
     else:
         raise ValueError("Dataset not supported. Use 'cora' or 'pubmed'.")
     
-    # Download the dataset if not exists
-    os.makedirs('data', exist_ok=True)
-    if dataset_name == 'cora':
-        if not os.path.exists('data/cora'):
-            os.makedirs('data/cora', exist_ok=True)
-            print("Downloading Cora dataset...")
-            # Here you would typically use wget or curl to download the dataset
-            # Since we can't execute shell commands directly, you would need to 
-            # implement the download functionality based on your environment
-    elif dataset_name == 'pubmed':
-        if not os.path.exists('data/pubmed'):
-            os.makedirs('data/pubmed', exist_ok=True)
-            print("Downloading PubMed dataset...")
-            # Similar to above
+    # For this example, we assume data is already downloaded into the correct paths
     
-    # For this example, let's assume data is already downloaded
-    # In practice, you would need to download or ensure data is present
-
     if dataset_name == 'cora':
         # Load node features and labels
         idx_features_labels = np.genfromtxt(content_path, dtype=np.dtype(str))
@@ -68,17 +53,24 @@ def load_data(dataset_name):
         # Load edges
         edges_unordered = np.genfromtxt(cites_path, dtype=np.int32)
         edges = np.array(list(map(lambda x: [idx_map[x[0]], idx_map[x[1]]],
-                                 edges_unordered)))
+                                  edges_unordered)))
         
     elif dataset_name == 'pubmed':
-        # PubMed dataset has a different format
-        # This is a simplified version for illustration
-        # In practice, you would need to parse the specific format of PubMed
-        
-        # Placeholder for PubMed parsing
-        features = sp.csr_matrix(np.random.rand(10000, 500))  # Dummy features
-        labels = np.zeros((10000, 3))  # Dummy labels
-        edges = np.random.randint(0, 10000, size=(20000, 2))  # Dummy edges
+        # --- REPLACED DUMMY DATA WITH REAL PARSING LOGIC ---
+        # Load node features and labels from the .tab file
+        idx_features_labels = np.genfromtxt(content_path, dtype=np.dtype(str))
+        features = sp.csr_matrix(idx_features_labels[:, 1:-1], dtype=np.float32)
+        labels = encode_onehot(idx_features_labels[:, -1])
+
+        # Build the graph
+        idx = np.array(idx_features_labels[:, 0], dtype=np.int32)
+        idx_map = {j: i for i, j in enumerate(idx)}
+
+        # Load edges from the .cites.tab file
+        edges_unordered = np.genfromtxt(cites_path, dtype=np.int32)
+        edges = np.array(list(map(lambda x: [idx_map.get(x[0]), idx_map.get(x[1])], edges_unordered)))
+        # Filter out any edges that might point to nodes not in our content file
+        edges = np.array([edge for edge in edges if all(node is not None for node in edge)], dtype=np.int32)
     
     # Build adjacency matrix
     adj = sp.coo_matrix((np.ones(edges.shape[0]), (edges[:, 0], edges[:, 1])),
@@ -324,11 +316,11 @@ if __name__ == "__main__":
     print("\nRunning GCN Experiment 2...")
     train_losses2, val_losses2, val_accs2, acc_test2, cm2, model2 = train_gcn(
         features, adj, labels, idx_train, idx_val, idx_test,
-        hidden_dim=32,  # Larger hidden dim
-        lr=0.005,       # Different learning rate
-        weight_decay=1e-4,  # Different weight decay
+        hidden_dim=32,   # Larger hidden dim
+        lr=0.005,        # Different learning rate
+        weight_decay=1e-4,   # Different weight decay
         epochs=200,
-        dropout=0.3     # Less dropout
+        dropout=0.3      # Less dropout
     )
     plot_gcn_results(train_losses2, val_losses2, val_accs2, cm2, num_classes, "experiment2")
     
